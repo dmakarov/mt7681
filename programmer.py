@@ -178,15 +178,15 @@ class SerialLine:
 
     def get_params(self):
         for v in [Parm_STK_HW_VER,
-                  Parm_STK_SW_MAJOR,
-                  Parm_STK_SW_MINOR,
                   #Parm_STK_TOPCARD_DETECT,
                   #Parm_STK_VTARGET,
                   #Parm_STK_VADJUST,
                   #Parm_STK_OSC_PSCALE,
                   #Parm_STK_OSC_CMATCH,
                   #Parm_STK_SCK_DURATION,
-                  Parm_STK_RESET_DURATION]:
+                  #Parm_STK_RESET_DURATION,
+                  Parm_STK_SW_MAJOR,
+                  Parm_STK_SW_MINOR]:
             packet = b''.join([Cmnd_STK_GET_PARAMETER, v, Sync_CRC_EOP])
             reply = b''
             self.sock.sendall(packet)
@@ -213,8 +213,8 @@ class SerialLine:
         parmode = b'\x01'
         polling = b'\x01'
         selftimed = b'\x01'
-        pagesizehigh = b'\x00'
-        pagesizelow = b'\x80'
+        pagesizehigh = bytes([0xff & (self.conf['page_size'] >> 8)])
+        pagesizelow = bytes([0xff & self.conf['page_size']])
         packet = b''.join([Cmnd_STK_SET_DEVICE,
                            devicecode,
                            revision,
@@ -243,7 +243,7 @@ class SerialLine:
 
     def set_device_extended(self):
         packet = b''.join([Cmnd_STK_SET_DEVICE_EXT,
-                           b'\x05',
+                           b'\x04', # this should be \x04, but avrdude uses \x05, bootloader bug?
                            b'\x04',
                            b'\xd7',
                            b'\xc2',

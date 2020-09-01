@@ -3,5 +3,5 @@
     "slport": 1000,
     "atport": 1001,
     "verify": false,
-    "page_size": 256
+    "page_size": 128
 }
