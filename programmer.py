@@ -102,6 +102,7 @@ Parm_STK_PROGMODE = b'\x93'  # - 'P' or 'S'
 Parm_STK_PARAMODE = b'\x94'  # - TRUE or FALSE
 Parm_STK_POLLING = b'\x95'  # - TRUE or FALSE
 Parm_STK_SELFTIMED = b'\x96'  # - TRUE or FALSE
+Parm_STK_TOPCARD_DETECT = b'\x98' # - 1 STK502, 2 STK501, 3 no top-card
 
 # *****************[ STK status bit definitions ]***************************
 
@@ -120,26 +121,26 @@ Stat_STK_LEDBLINK = b'\x80'  # LED blink ON/OFF,  '1' - Blink
 class SerialLine:
 
     def __init__(self, conf):
+        self.conf = conf
         self.params = {}
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((conf['device_address'], conf['slport']))
-        self.clean()
 
     def clean(self):
         data = b''
         for it in range(10):
             rlist, _, _ = select.select([self.sock], [], [], 0.001)
             if len(rlist) > 0:
-                r = self.sock.recv(128)
+                r = self.sock.recv(1024)
                 data += r
-        print('Cleaned serial line', data)
+        print('Cleaned serial line', data.hex())
 
     def sync(self):
         packet = b''.join([Cmnd_STK_GET_SYNC, Sync_CRC_EOP])
         reply = b''
         for it in range(10):
             self.sock.sendall(packet)
-            print('Sent packet', packet)
+            print('Sent packet', packet.hex())
             rlist, _, _ = select.select([self.sock], [], [], 0.1)
             if len(rlist) > 0:
                 r = self.sock.recv(1)
@@ -147,11 +148,12 @@ class SerialLine:
                 if r == Resp_STK_INSYNC:
                     r = self.sock.recv(1)
                     reply += r
-                    print('Synced with the bootloader', reply)
-                    return
+                    print('Synced with the bootloader', reply.hex())
+                    return True
                 else:
-                    print('Received', reply)
-        print('Unable to sync with bootloader', reply)
+                    print('Received', reply.hex())
+        print('Unable to sync with bootloader', reply.hex())
+        return False
 
     def ack(self, action):
         '''
@@ -167,31 +169,43 @@ class SerialLine:
                 r = self.sock.recv(1)
                 reply += r
                 if r == Resp_STK_OK:
-                    print('Success', action, reply)
+                    #print('Success', action, reply.hex())
                     return True
-            print('Failure', action, reply)
+            print('Failure', action, reply.hex())
             return False
         print('Timeout', action)
         return False
 
-    def get_param(self, arg):
-        packet = b''.join([Cmnd_STK_GET_PARAMETER, arg, Sync_CRC_EOP])
-        reply = b''
-        self.sock.sendall(packet)
-        print('Sent packet', packet)
-        rlist, _, _ = select.select([self.sock], [], [], 0.1)
-        if len(rlist) > 0:
-            r = self.sock.recv(1)
-            reply += r
-            if r == Resp_STK_INSYNC:
-                r = self.sock.recv(2)
+    def get_params(self):
+        for v in [Parm_STK_HW_VER,
+                  Parm_STK_SW_MAJOR,
+                  Parm_STK_SW_MINOR,
+                  #Parm_STK_TOPCARD_DETECT,
+                  #Parm_STK_VTARGET,
+                  #Parm_STK_VADJUST,
+                  #Parm_STK_OSC_PSCALE,
+                  #Parm_STK_OSC_CMATCH,
+                  #Parm_STK_SCK_DURATION,
+                  Parm_STK_RESET_DURATION]:
+            packet = b''.join([Cmnd_STK_GET_PARAMETER, v, Sync_CRC_EOP])
+            reply = b''
+            self.sock.sendall(packet)
+            print('Sent packet', packet.hex())
+            rlist, _, _ = select.select([self.sock], [], [], 0.1)
+            if len(rlist) > 0:
+                r = self.sock.recv(1)
                 reply += r
-                print('Got parameter', arg, reply)
-                return reply[1]
-            print('Failed to get parameter', arg, reply)
-            return None
-        print('Timeout getting parameter', arg)
-        return None
+                if r == Resp_STK_INSYNC:
+                    r = self.sock.recv(2)
+                    reply += r
+                    print('Got parameter', v.hex(), reply.hex())
+                    self.params[v] = reply[1]
+                    continue
+                print('Failed getting parameter', v.hex(), reply.hex())
+                return False
+            print('Timeout getting parameter', v.hex())
+            return False
+        return True
 
     def set_device(self, devicecode):
         revision = b'\x00'
@@ -224,7 +238,7 @@ class SerialLine:
                            b'\x00',
                            Sync_CRC_EOP])
         self.sock.sendall(packet)
-        print('Sent packet', packet)
+        print('Sent packet', packet.hex())
         return self.ack('setting the device')
 
     def set_device_extended(self):
@@ -236,14 +250,14 @@ class SerialLine:
                            b'\x00',
                            Sync_CRC_EOP])
         self.sock.sendall(packet)
-        print('Sent packet', packet)
+        print('Sent packet', packet.hex())
         return self.ack('setting the extended device')
 
     def get_signature(self):
         packet = b''.join([Cmnd_STK_READ_SIGN, Sync_CRC_EOP])
         reply = b''
         self.sock.sendall(packet)
-        print('Sent packet', packet)
+        print('Sent packet', packet.hex())
         rlist, _, _ = select.select([self.sock], [], [], 0.1)
         if len(rlist) > 0:
             r = self.sock.recv(1)
@@ -252,9 +266,9 @@ class SerialLine:
                 r = self.sock.recv(4)
                 reply += r
                 if reply[4] == Resp_STK_OK[0]:
-                    print('Read signature', reply)
+                    print('Read signature', reply.hex())
                     return reply[1:4]
-            print('Failed reading signature', reply)
+            print('Failed reading signature', reply.hex())
             return None
         print('Timeout reading signature')
         return None
@@ -262,31 +276,29 @@ class SerialLine:
     def tx(self, command, action):
         packet = b''.join([command, Sync_CRC_EOP])
         self.sock.sendall(packet)
-        print('Sent packet', packet)
+        print('Sent packet', packet.hex())
         return self.ack(action)
 
     def upload(self, chunks):
+        pgsz = self.conf['page_size']
+        size = bytes([0xff & (pgsz >> 8), 0xff & pgsz])
         for c in chunks:
             if c.size == 0:
                 continue
             addr = c.begin
             index = 0
-            pgsz = 0x80
             while index < len(c.data):
                 ab = bytes([0xff & addr, 0xff & (addr >> 8)])
                 packet = b''.join([Cmnd_STK_LOAD_ADDRESS, ab, Sync_CRC_EOP])
                 self.sock.sendall(packet)
-                print('Sent packet', packet)
-                if not self.ack('setting address {0}'.format(addr)):
+                if not self.ack('setting address {:x}'.format(addr)):
                     return False
-                block = c.data[index:index + pgsz]
-                if len(block) < pgsz:
-                    padding = pgsz - len(block)
-                    block += b'\xff' * padding
-                ps = bytes([0xff & (pgsz >> 8), 0xff & pgsz])
-                packet = b''.join([Cmnd_STK_PROG_PAGE, ps, b'\x46', block, Sync_CRC_EOP])
+                page = c.data[index:index + pgsz]
+                if len(page) < pgsz:
+                    padding = pgsz - len(page)
+                    page += b'\xff' * padding
+                packet = b''.join([Cmnd_STK_PROG_PAGE, size, b'\x46', page, Sync_CRC_EOP])
                 self.sock.sendall(packet)
-                print('Sent packet', packet)
                 if not self.ack('programming page'):
                     return False
                 addr += int(pgsz / 2)
@@ -294,27 +306,21 @@ class SerialLine:
         return True
 
     def verify(self, chunks):
+        pgsz = self.conf['page_size']
+        size = bytes([0xff & (pgsz >> 8), 0xff & pgsz])
         for c in chunks:
             if c.size == 0:
                 continue
             addr = c.begin
             index = 0
-            pgsz = 0x80
             while index < len(c.data):
                 ab = bytes([0xff & addr, 0xff & (addr >> 8)])
                 packet = b''.join([Cmnd_STK_LOAD_ADDRESS, ab, Sync_CRC_EOP])
                 self.sock.sendall(packet)
-                print('Sent packet', packet)
                 if not self.ack('setting address {0}'.format(addr)):
                     return
-                block = c.data[index:index + pgsz]
-                if len(block) < pgsz:
-                    padding = pgsz - len(block)
-                    block += b'\xff' * padding
-                ps = bytes([0xff & (pgsz >> 8), 0xff & pgsz])
-                packet = b''.join([Cmnd_STK_READ_PAGE, ps, b'\x46', Sync_CRC_EOP])
+                packet = b''.join([Cmnd_STK_READ_PAGE, size, b'\x46', Sync_CRC_EOP])
                 self.sock.sendall(packet)
-                print('Sent packet', packet)
                 reply = b''
                 data = b''
                 rlist, _, _ = select.select([self.sock], [], [], 10)
@@ -324,34 +330,36 @@ class SerialLine:
                     if r == Resp_STK_INSYNC:
                         while len(data) < pgsz:
                             r = self.sock.recv(pgsz - len(data))
-                            print('Received', len(r), 'bytes of page')
                             reply += r
                             data += r
                         r = self.sock.recv(1)
                         reply += r
                         if r != Resp_STK_OK:
-                            print('Failed reading program', reply)
-                            return
-                        if data != block:
+                            print('Failed reading page', reply.hex())
+                            return False
+                        page = c.data[index:index + pgsz]
+                        if len(page) < pgsz:
+                            padding = pgsz - len(page)
+                            page += b'\xff' * padding
+                        if data != page:
                             print('Data mismatch')
-                            return
-                        print('Success reading program', reply)
+                            return False
                 else:
-                    print('Timeout reading program')
-                    return
+                    print('Timeout reading page')
+                    return False
                 addr += int(pgsz / 2)
                 index += pgsz
+        return True
 
     def run(self, chunks):
+        self.clean()
         time.sleep(0.4)
         self.sync()
-        self.sync()
+        if not self.sync():
+            return
         self.clean()
-        for v in [Parm_STK_HW_VER, Parm_STK_SW_MAJOR, Parm_STK_SW_MINOR, b'\x98', Parm_STK_VTARGET, Parm_STK_VADJUST, Parm_STK_OSC_PSCALE, Parm_STK_OSC_CMATCH, Parm_STK_SCK_DURATION]:
-            p = self.get_param(v)
-            if p is None:
-                break
-            self.params[v] = p
+        if not self.get_params():
+            return
         if not self.set_device(b'\x86'):
             return
         if not self.set_device_extended():
@@ -365,11 +373,11 @@ class SerialLine:
         if not self.upload(chunks):
             self.tx(Cmnd_STK_LEAVE_PROGMODE, 'leaving program mode')
             return
-        self.verify(chunks)
+        if self.conf['verify']:
+            self.verify(chunks)
         self.tx(Cmnd_STK_LEAVE_PROGMODE, 'leaving program mode')
 
     def close(self):
-        self.clean()
         self.sock.close()
 
 
