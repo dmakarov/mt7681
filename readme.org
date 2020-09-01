@@ -1,1 +1,30 @@
 Upload Arduino program via WiFi using WiFi Bee MT7681 module.
+
+The script programmer.py communicates with WiFi Bee MT7681 module to upload a
+hex file to Arduino board flash memory.  The MT7681 module, when connected to a
+WiFi router, listens on two TCP ports.  On port 1001 it accepts AT commands,
+using which the Arduino microcontroller can be reset, thus starting the
+bootloader protocol.  The bootloader reads data from the UART port and sends
+responses to it. MT7681 forwards data received from a TCP connection on port
+1000 to the Arduino UART port and back.  This makes it possible to upload
+sketches via WiFi, by first resetting Arduino via an AT command sent to MT7681
+IP address on port 1001 and then communicating with the bootloader by sending
+and reading data to/from MT7681 IP address on port 1000.
+
+To upload a new sketch run the script
+#+begin_src sh
+  $ python programmer.py path_to_a_sketch.hex
+#+end_src
+
+Before running the script make sure to set the correct IP address of the MT7681
+module in config.json file.
+
+The script tracer.dtrace helps to see the details of the bootloader protocol as
+performed by avrdude sketch uploader.  To see the communication between the
+bootloader, connect the Arduino board via USB cable to computer, start the
+dtrace script
+#+begin_src sh
+  $ sudo dtrace -s tracer.dtrace
+#+end_src
+and upload a new sketch for example from Arduino IDE.  An example of uploading a
+sketch is in comment in the tracer.dtrace file.
