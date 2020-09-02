@@ -2,6 +2,9 @@
     "device_address": "192.168.1.23",
     "slport": 1000,
     "atport": 1001,
+    "params": false,
     "verify": false,
+    "signature": false,
+    "verbose": true,
     "page_size": 128
 }
