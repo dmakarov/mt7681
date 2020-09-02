@@ -358,12 +358,13 @@ class SerialLine:
         if not self.sync():
             return
         self.clean()
-        if not self.get_params():
-            return
-        if not self.set_device(b'\x86'):
-            return
-        if not self.set_device_extended():
-            return
+        # params and device are ignored by optiboot bootloader
+        #if not self.get_params():
+        #    return
+        #if not self.set_device(b'\x86'):
+        #    return
+        #if not self.set_device_extended():
+        #    return
         if not self.tx(Cmnd_STK_ENTER_PROGMODE, 'entering program mode'):
             return
         sign = self.get_signature()
