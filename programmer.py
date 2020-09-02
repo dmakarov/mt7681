@@ -355,11 +355,8 @@ class SerialLine:
         # all of this must run in less than 0.5 second, for uploading large sketches it's a challenge
         self.clean()
         time.sleep(0.4)
-        # self.sync()
-        # one sync is enough
         if not self.sync():
             return
-        self.clean()
         # params, set device, enter prog mode are ignored by optiboot bootloader
         if False:
             if not self.get_params():

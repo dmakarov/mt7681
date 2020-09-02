@@ -9,7 +9,8 @@ responses to it. MT7681 forwards data received from a TCP connection on port
 1000 to the Arduino UART port and back.  This makes it possible to upload
 sketches via WiFi, by first resetting Arduino via an AT command sent to MT7681
 IP address on port 1001 and then communicating with the bootloader by sending
-and reading data to/from MT7681 IP address on port 1000.
+and reading data to/from MT7681 IP address on port 1000.  The implementation of
+the bootloader protocol matches the [[https://github.com/arduino/ArduinoCore-avr/tree/master/bootloaders/optiboot][optiboot implementation]].
 
 To upload a new sketch run the script
 #+begin_src sh
