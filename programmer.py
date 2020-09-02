@@ -352,25 +352,28 @@ class SerialLine:
         return True
 
     def run(self, chunks):
+        # all of this must run in less than 0.5 second, for uploading large sketches it's a challenge
         self.clean()
         time.sleep(0.4)
-        self.sync()
+        # self.sync()
+        # one sync is enough
         if not self.sync():
             return
         self.clean()
-        # params and device are ignored by optiboot bootloader
-        #if not self.get_params():
-        #    return
-        #if not self.set_device(b'\x86'):
-        #    return
-        #if not self.set_device_extended():
-        #    return
-        if not self.tx(Cmnd_STK_ENTER_PROGMODE, 'entering program mode'):
-            return
-        sign = self.get_signature()
-        if sign is None:
-            self.tx(Cmnd_STK_LEAVE_PROGMODE, 'leaving program mode')
-            return
+        # params, set device, enter prog mode are ignored by optiboot bootloader
+        if False:
+            if not self.get_params():
+                return
+            if not self.set_device(b'\x86'):
+                return
+            if not self.set_device_extended():
+                return
+            if not self.tx(Cmnd_STK_ENTER_PROGMODE, 'entering program mode'):
+                return
+            sign = self.get_signature()
+            if sign is None:
+                self.tx(Cmnd_STK_LEAVE_PROGMODE, 'leaving program mode')
+                return
         if not self.upload(chunks):
             self.tx(Cmnd_STK_LEAVE_PROGMODE, 'leaving program mode')
             return
