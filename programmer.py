@@ -24,28 +24,44 @@ Sync_CRC_EOP = b'\x20'
 
 
 class SerialLine:
+    '''
+    Control the connection that is redirected to Arduino board serial port.
+    '''
 
     def __init__(self, conf):
+        '''
+        Establish connection with the MT7681 host on the port for forwarding
+        data to and from the serial port of Arduino board.
+        '''
         self.conf = conf
         self.params = {}
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((conf['device_address'], conf['slport']))
 
     def clean(self):
+        '''
+        Consume any data that might be pending in the serial line buffer.
+        This is important that the data doesn't interfere with the protocol responses.
+        '''
         data = b''
         for it in range(10):
             rlist, _, _ = select.select([self.sock], [], [], 0.001)
             if len(rlist) > 0:
                 r = self.sock.recv(1024)
                 data += r
-        print('Cleaned serial line', data.hex())
+        if self.conf['verbose']:
+            print('Cleaned serial line', data.hex())
 
     def sync(self):
+        '''
+        Synchronize with the bootloader.
+        '''
         packet = b''.join([Cmnd_STK_GET_SYNC, Sync_CRC_EOP])
         reply = b''
         for it in range(10):
             self.sock.sendall(packet)
-            print('Sent packet', packet.hex())
+            if self.conf['verbose']:
+                print('Sent packet', packet.hex())
             rlist, _, _ = select.select([self.sock], [], [], 0.1)
             if len(rlist) > 0:
                 r = self.sock.recv(1)
@@ -62,8 +78,9 @@ class SerialLine:
 
     def ack(self, action):
         '''
-        Returns: True if the string was found, otherwise False
-        Description: It waits for the acknowledge string.
+        Receive acknowledgment response from the bootloader.
+        The parameter action is a text message to print when acknowledge
+        received or waiting for the responses stopped on time out.
         '''
         reply = b''
         rlist, _, _ = select.select([self.sock], [], [], 20)
@@ -122,6 +139,7 @@ class SerialLine:
             return None
         print('Timeout reading signature')
         return None
+
     def tx(self, command, action):
         packet = b''.join([command, Sync_CRC_EOP])
         self.sock.sendall(packet)
@@ -141,7 +159,7 @@ class SerialLine:
                 packet = b''.join([Cmnd_STK_LOAD_ADDRESS, ab, Sync_CRC_EOP])
                 self.sock.sendall(packet)
                 if not self.ack('setting address {:x}'.format(addr)):
-                    if self.conf["verbose"] and index > 0:
+                    if self.conf['verbose'] and index > 0:
                         print()
                     return False
                 page = c.data[index:index + pgsz]
@@ -151,14 +169,14 @@ class SerialLine:
                 packet = b''.join([Cmnd_STK_PROG_PAGE, size, b'\x46', page, Sync_CRC_EOP])
                 self.sock.sendall(packet)
                 if not self.ack('programming page'):
-                    if self.conf["verbose"] and index > 0:
+                    if self.conf['verbose'] and index > 0:
                         print()
                     return False
-                if self.conf["verbose"]:
+                if self.conf['verbose']:
                     print('{}..'.format(int(100 * index / c.size)), end=' ', flush=True)
                 addr += int(pgsz / 2)
                 index += pgsz
-        if self.conf["verbose"]:
+        if self.conf['verbose']:
             print('100')
         return True
 
@@ -209,7 +227,9 @@ class SerialLine:
         return True
 
     def run(self, chunks):
-        # all of this must run in less than 0.5 second, for uploading large sketches it's a challenge
+        '''
+        Run the protocol and upload the sketch code
+        '''
         self.clean()
         time.sleep(0.4)
         if not self.sync():
@@ -233,6 +253,7 @@ class SerialLine:
 
 class ATLine:
     '''
+    Control the AT line.
     +++
     AT+GPIO0=1
     OK
