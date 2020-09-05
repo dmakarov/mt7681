@@ -159,7 +159,7 @@ class SerialLine:
                 addr += int(pgsz / 2)
                 index += pgsz
         if self.conf["verbose"]:
-            print()
+            print('100')
         return True
 
     def verify(self, chunks):
